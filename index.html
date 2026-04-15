@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>上海政策 RSS 聚合</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css">
+  <link rel="alternate" type="application/rss+xml" title="上海政策RSS聚合" href="./上海政策rss.xml">
+  <style>
+    .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="app" class="max-w-5xl mx-auto px-4 py-6 sm:py-8">
+    <!-- Header -->
+    <header class="mb-6">
+      <h1 class="text-2xl sm:text-3xl font-bold text-slate-800 mb-2">上海政策 RSS 聚合</h1>
+      <p class="text-slate-600 mb-4 text-sm sm:text-base">自动抓取上海市经信委、发改委、科委等政府部门的政策通知。</p>
+      <div class="flex flex-wrap gap-3">
+        <a id="rss-btn" href="./上海政策rss.xml" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition min-h-[44px]">
+          <i class="fa fa-rss mr-2"></i>订阅 RSS
+        </a>
+        <button type="button" id="refresh-btn" class="inline-flex items-center px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition min-h-[44px]">
+          <i class="fa fa-refresh mr-2" id="refresh-icon"></i>刷新数据
+        </button>
+        <a href="https://github.com/cherylchenxue-star/sh-gov-rss" class="inline-flex items-center px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition min-h-[44px]">
+          <i class="fa fa-github mr-2"></i>GitHub 仓库
+        </a>
+      </div>
+    </header>
+
+    <!-- Stats Bar -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div class="flex items-center gap-3 flex-wrap">
+          <span class="text-slate-700 font-medium">共 <span id="stat-total" class="text-blue-600 font-bold">47</span> 条政策</span>
+          <span class="text-slate-400 hidden sm:inline">|</span>
+          <span class="text-sm text-slate-500">更新时间：<span id="stat-updated">2026-04-15 12:52</span></span>
+        </div>
+        <div id="source-badges" class="flex flex-wrap gap-2">
+          <!-- badges injected by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4 sticky top-0 z-30">
+      <div class="flex flex-col gap-3">
+        <div class="relative flex-1">
+          <i class="fa fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+          <input id="search-input" type="text" placeholder="搜索标题、摘要、来源..." class="w-full pl-10 pr-9 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base">
+          <button id="search-clear" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 hidden" aria-label="清除搜索">
+            <i class="fa fa-times-circle"></i>
+          </button>
+        </div>
+        <div class="flex flex-wrap gap-2 pb-1 sm:pb-0">
+          <div class="relative">
+            <button type="button" id="source-dropdown-btn" class="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 active:bg-gray-100 flex items-center gap-2 min-h-[44px] whitespace-nowrap cursor-pointer select-none">
+              来源<i class="fa fa-chevron-down text-xs text-gray-400 pointer-events-none"></i>
+              <span id="source-badge" class="ml-1 bg-blue-600 text-white text-xs px-1.5 rounded-full hidden pointer-events-none">0</span>
+            </button>
+            <div id="source-dropdown-panel" class="hidden absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-2 min-w-[200px] z-40">
+              <div class="max-h-64 overflow-y-auto" id="source-options">
+                <!-- checkboxes injected by JS -->
+              </div>
+              <div class="border-t border-gray-100 mt-2 pt-2 flex gap-2">
+                <button type="button" id="source-select-all" class="flex-1 px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded cursor-pointer">全选</button>
+                <button type="button" id="source-clear" class="flex-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded cursor-pointer">清空</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="relative">
+            <button type="button" id="tag-dropdown-btn" class="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 active:bg-gray-100 flex items-center gap-2 min-h-[44px] whitespace-nowrap cursor-pointer select-none">
+              标签<i class="fa fa-chevron-down text-xs text-gray-400 pointer-events-none"></i>
+              <span id="tag-badge" class="ml-1 bg-blue-600 text-white text-xs px-1.5 rounded-full hidden pointer-events-none">0</span>
+            </button>
+            <div id="tag-dropdown-panel" class="hidden absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-2 min-w-[200px] z-40">
+              <div class="space-y-1 max-h-64 overflow-y-auto" id="tag-options">
+                <!-- tag buttons injected by JS -->
+              </div>
+            </div>
+          </div>
+
+          <div class="relative">
+            <button type="button" id="date-dropdown-btn" class="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 active:bg-gray-100 flex items-center gap-2 min-h-[44px] whitespace-nowrap cursor-pointer select-none">
+              日期<i class="fa fa-chevron-down text-xs text-gray-400 pointer-events-none"></i>
+            </button>
+            <div id="date-dropdown-panel" class="hidden absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-2 min-w-[200px] z-40">
+              <div class="space-y-1">
+                <button type="button" data-value="all" class="date-option w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm cursor-pointer">全部时间</button>
+                <button type="button" data-value="7d" class="date-option w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm cursor-pointer">近7天</button>
+                <button type="button" data-value="30d" class="date-option w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm cursor-pointer">近30天</button>
+                <button type="button" data-value="90d" class="date-option w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm cursor-pointer">近90天</button>
+                <div class="border-t border-gray-100 pt-2 mt-1">
+                  <div class="px-3 py-1 text-xs text-gray-500">自定义</div>
+                  <div class="flex gap-2 px-3 py-1">
+                    <input id="custom-start" type="date" class="border border-gray-200 rounded px-2 py-1 text-sm w-full">
+                    <span class="text-gray-400 self-center">-</span>
+                    <input id="custom-end" type="date" class="border border-gray-200 rounded px-2 py-1 text-sm w-full">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="relative">
+            <button type="button" id="sort-dropdown-btn" class="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 active:bg-gray-100 flex items-center gap-2 min-h-[44px] whitespace-nowrap cursor-pointer select-none">
+              排序<i class="fa fa-chevron-down text-xs text-gray-400 pointer-events-none"></i>
+            </button>
+            <div id="sort-dropdown-panel" class="hidden absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-2 min-w-[140px] z-40">
+              <button type="button" data-value="desc" class="sort-option w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm bg-blue-50 text-blue-700 cursor-pointer">日期倒序</button>
+              <button type="button" data-value="asc" class="sort-option w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm cursor-pointer">日期正序</button>
+            </div>
+          </div>
+
+          <button type="button" id="reset-btn" class="px-3 py-2 text-gray-600 hover:bg-gray-100 active:bg-gray-200 border border-gray-200 rounded-lg min-h-[44px] whitespace-nowrap cursor-pointer select-none">
+            <i class="fa fa-refresh mr-1"></i>重置
+          </button>
+        </div>
+      </div>
+
+      <!-- Active Filters -->
+      <div id="active-filters" class="hidden flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+        <span class="text-xs text-gray-500">已筛选：</span>
+        <div id="active-filters-list" class="flex flex-wrap gap-2"></div>
+        <button id="clear-all-filters" class="text-xs text-gray-500 hover:text-gray-700 underline ml-auto">清除全部</button>
+      </div>
+    </div>
+
+    <!-- Policy List -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div class="px-4 sm:px-6 py-3 border-b border-gray-100 flex items-center justify-between">
+        <h2 class="font-semibold text-slate-800 text-sm sm:text-base">最新政策</h2>
+        <span id="result-count" class="text-sm text-slate-500"></span>
+      </div>
+      <ul id="policy-list" class="divide-y divide-gray-100">
+        <!-- items injected by JS -->
+      </ul>
+      <div id="load-more-container" class="px-4 py-4 border-t border-gray-100 text-center hidden">
+        <button id="load-more-btn" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition min-h-[44px]">加载更多</button>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="empty-state" class="hidden py-16 text-center">
+      <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
+        <i class="fa fa-search text-2xl text-gray-400"></i>
+      </div>
+      <h3 class="text-lg font-medium text-slate-700 mb-1">未找到匹配的政策</h3>
+      <p class="text-sm text-slate-500 mb-4">请尝试调整筛选条件或更换搜索关键词</p>
+      <button id="empty-clear-btn" class="px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition border border-blue-200">清除全部筛选</button>
+    </div>
+
+    <!-- Footer -->
+    <footer class="mt-8 text-center text-sm text-slate-500">
+      <p class="mb-2">数据来源：上海市经信委、上海市经信委专项资金、上海市发改委、上海市科委</p>
+      <p class="flex justify-center gap-4">
+        <a href="./上海政策rss.xml" class="hover:text-blue-600">RSS 订阅</a>
+        <a href="https://github.com/cherylchenxue-star/sh-gov-rss" class="hover:text-slate-800">GitHub 仓库</a>
+      </p>
+    </footer>
+  </div>
+
+  <script>
+    window.POLICY_DATA = {"meta":{"updatedAt":"2026-04-15 12:52","totalCount":47},"sources":[{"id":"sh-fgw","name":"上海市发改委","count":20},{"id":"sh-sheitc-zcfg","name":"上海市经信委","count":10},{"id":"sh-sheitc-zxzj","name":"上海市经信委专项资金","count":10},{"id":"sh-stcsm","name":"上海市科委","count":7}],"allTags":["中小企业","交通物流","养老服务","农业","商贸消费","房地产","教育","新材料","新能源","智能制造","汽车","生物医药","科技创新","能源电力","节能环保","金融科技"],"rssLink":"./上海政策rss.xml","policies":[{"id":"sh-fgw--6017093961013960366","title":"关于我市事业单位性质殡葬服务机构用水、用电执行居民价格的通知","link":"http://fgw.sh.gov.cn/fgw_jggl/20260414/7c1e2dd1573b4989bd71a33a59102776.html","date":"2026-04-14","sourceId":"sh-fgw","source":"上海市发改委","summary":"各区发展改革委、民政局，市（区）各供水、供电企业： 为贯彻落实《国家发展改革委 民政部 财政部关于进一步完善殡葬服务收费政策的通知》（发改价格〔2026〕108号）要求，现就我市事业单位性质殡葬服务机构用水、用电执行居民价格有关事项通知如下： 一、适用范围 本通知所称事业单位性质殡葬服务机构，是指在我市行政区域内，由政府举办具有事业单位性质，且经民政部门许可运营殡仪馆、骨灰堂、公墓等殡葬设施并提供遗体处理、骨灰存放、安葬等殡葬服务的机构。 二、价格标准 殡葬服务机构用水、用电执行居民价格，具体按照执行居民价格的非居民用户（如学校、养老院等）价格政策执行。","tags":["教育","养老服务"]},{"id":"sh-fgw-7975623276903217824","title":"关于优化我市新建住宅建筑区划红线内供电配套工程收费政策的通知","link":"http://fgw.sh.gov.cn/fgw_jggl/20260414/d217f62051fc42b781e9575f9545e930.html","date":"2026-04-14","sourceId":"sh-fgw","source":"上海市发改委","summary":"各有关单位： 根据《国务院办公厅转发国家发展改革委等部门关于清理规范城镇供水供电供气供暖行业收费促进行业高质量发展意见的通知》（国办函〔2020〕129号）、《上海市人民政府办公厅转发市发展改革委等六部门关于本市清理规范城镇供水供电供气行业收费促进行业高质量发展的实施意见的通知》（沪府办〔2021〕34号）、《上海市定价目录》，为优化我市新建住宅建筑区划红线内供电配套工程收费，促进住宅供电配套建设市场发展，现就我市新建住宅（不含别墅）建筑区划红线内供电配套工程收费有关事项通知如下： 一、供电配套工程的范围 新建住宅供电配套工程范围为建筑区划红线（或建筑区划红线内第一级配电站）到住宅楼或公建设施…","tags":["房地产"]},{"id":"sh-fgw--1383343946752057831","title":"上海市发展和改革委员会 上海市教育委员会 上海市财政局关于印发《上海市幼儿园收费管理办法》的通知","link":"http://fgw.sh.gov.cn/fgw_gfxwj/20260410/54dbd9e98166472d88cd1fedc0786e26.html","date":"2026-04-10","sourceId":"sh-fgw","source":"上海市发改委","summary":"各区发展改革委、教育局、财政局，各有关单位： 为规范本市幼儿园收费行为，促进幼儿园健康有序发展，现将《上海市幼儿园收费管理办法》印发你们，请认真按照执行。 上海市发展和改革委员会 上海市教育委员会 上海市财政局 2026年4月8日 上海市幼儿园收费管理办法 第一章 总则 第一条（目的依据） 为规范幼儿园收费行为，维护儿童家长的合法权益，更好促进学前教育普及普惠安全优质发展，有效降低人民群众保育教育成本，推动完善生育支持政策体系，根据《中华人民共和国价格法》《中华人民共和国学前教育法》《上海市学前教育与托育服务条例》《国家发展改革委 教育部 财政部关于完善幼儿园收费政策的通知》，结合本市实际，制…","tags":["教育","养老服务"]},{"id":"sh-stcsm--4848977987331469022","title":"关于开展2026年度上海市科技创新券服务机构综合评价工作的通知","link":"https://stcsm.sh.gov.cn/zwgk/tzgs/zhtz/20260409/e305cb37a7cc4c31a9abefbc586ce72d.html","date":"2026-04-09","sourceId":"sh-stcsm","source":"上海市科委","summary":"各有关单位： 根据《上海市科技创新券管理办法》（沪科规〔2025〕6号）、《上海市科技创新券服务机构管理实施细则》（沪科规〔2026〕1号），现组织开展2026年度上海市科技创新券服务机构综合评价工作，有关事项通知如下： 一、评价对象 本次评价对象为已入驻上海市科技创新券智能化工作平台（以下简称“创新券平台”）满2年的服务机构。 二、评价周期 评价周期为2025年1月1日-2025年12月31日。 三、评价方式 评价采取“免申请”方式，按服务类别进行分类评价。服务类别包含技术转移转化服务（含科技金融服务）、技术研发服务、检验检测服务、科技咨询服务、科技创新资源开放共享服务。","tags":["金融科技","科技创新"]},{"id":"sh-fgw--4171635890678498290","title":"上海市发展和改革委员会关于车用汽、柴油价格的通知（2026年4月7日）","link":"http://fgw.sh.gov.cn/fgw_jggl/20260407/bd75260934ea47a095c006d989aec171.html","date":"2026-04-07","sourceId":"sh-fgw","source":"上海市发改委","summary":"各区发展改革委、中石化上海石油分公司、中石油上海销售分公司、中海油销售上海分公司： 根据国家发展改革委的有关通知，现就本市车用汽油和车用柴油价格等有关事项通知如下： 一、89号汽油和0号柴油最高零售价格每吨分别为11070元和9970元。各标号汽、柴油最高零售价格详见附件。 各成品油零售企业可在不超过最高零售价格的前提下，自主制定具体零售价格。 二、汽、柴油的最高供应价格和最高批发价格的作价办法仍按市发展改革委沪发改价商〔2008〕019号文件的有关规定执行。 三、上述调整后的价格自2026年4月7日24时起执行。 特此通知。","tags":["商贸消费","能源电力"]},{"id":"sh-fgw--7275060047480273172","title":"关于我市居民瓶装液化石油气基准价的通知","link":"http://fgw.sh.gov.cn/fgw_jggl/20260403/ec057ff195ed420fab5e6110e4b5a71c.html","date":"2026-04-03","sourceId":"sh-fgw","source":"上海市发改委","summary":"各居民瓶装液化石油气经营企业： 根据《关于完善我市居民瓶装液化石油气价格机制有关事项的通知》（沪发改价管〔2023〕16号）等文件的有关规定及液化石油气上游价格变动情况，自4月10日零点起，本市14.5kg包装规格居民瓶装液化石油气基准价调整为每瓶117元，其他包装规格基准价按每瓶实际容量折算。经营企业可在上浮不超过基准价20%范围内自主制定价格，下浮不限。 各经营企业应合法经营，严禁价格联盟、哄抬价格、实施垄断协议、滥用市场支配地位等价格违法行为。 特此通知。 上海市发展和改革委员会 2026年4月3日","tags":[]},{"id":"sh-stcsm-6983112015613766086","title":"关于《关于支持外资企业高能级项目落地 提升生物医药产业能级的若干措施（征求意见稿）》 公开征求意见的公告","link":"https://stcsm.sh.gov.cn/zwgk/yjzjzx/yjzjzx/20260403/632b41ebed3f44ee9e892b5d79a2981b.html","date":"2026-04-03","sourceId":"sh-stcsm","source":"上海市科委","summary":"为进一步促进生物医药外资企业在沪发展，推动投资规模大、产业带动能力强的高能级项目落地，我委研究编制了《关于支持外资企业高能级项目落地 提升生物医药产业能级的若干措施（征求意见稿）》，现向社会公开征求意见，并就有关事宜公告如下： 一、欢迎有关单位和社会各界人士通过电子邮件提出意见建议，邮件标题请注明“规范性文件征求意见”字样。 电子邮件：syc01@stcsm.sh.gov.cn 二、征求意见截止日期为 2026年4月12日 。 感谢您的参与和支持！ 上海市科学技术委员会 2026年4月3日 【相关附件】 关于支持外资企业高能级项目落地 提升生物医药产业能级的若干措施（征求意见稿）.pdf","tags":["生物医药"]},{"id":"sh-stcsm-6662597459212739567","title":"关于《上海市“十五五”期间享受科技创新进口税收政策的科研机构名单核定办法（征求意见稿）》 公开征求意见的公告","link":"https://stcsm.sh.gov.cn/zwgk/yjzjzx/yjzjzx/20260403/efbbaea8a1dd49ee8930ac97902f89c0.html","date":"2026-04-03","sourceId":"sh-stcsm","source":"上海市科委","summary":"为贯彻落实《关于“十五五”期间支持科技创新进口税收优惠政策的通知》（财关税〔2026〕7号）和《关于“十五五”期间支持科技创新进口税收优惠政策管理办法的通知》（财关税〔2026〕8号），核定享受科技创新进口税收优惠政策的科研机构名单，市科委会同相关部门研究起草《上海市“十五五”期间享受科技创新进口税收政策的科研机构名单核定办法（征求意见稿）》，现向社会公开征求意见。 一、有关单位和社会各界人士可以通过电子邮件方式提出意见建议，邮件标题请注明“规范性文件征求意见”字样。 电子邮件：ztc2024@stcsm.sh.gov.cn 二、征求意见截止日期为 2026年4月15日 。","tags":["科技创新"]},{"id":"sh-stcsm-3647261095937193433","title":"关于2026年度沪滇科技协同创新项目立项的通知","link":"https://stcsm.sh.gov.cn/zwgk/tzgs/gsgg/bsgsgg/kjjhxmjggb/20260331/00d4a946129e47829540efaca4ed198d.html","date":"2026-04-01","sourceId":"sh-stcsm","source":"上海市科委","summary":"沪科〔2026〕61号 各有关单位： 根据《上海市科学技术委员会关于发布2026年度沪滇科技协同创新项目申报指南的通知》（沪科指南〔2025〕40号）要求，经项目申报、形式审查、专家评审、立项公示等程序，现对《依托云南特色药用资源的放射性肠炎与炎症性肠病（IBD）创新药物研发及机制研究》等5个项目予以立项，市科委资助1000万元，其中2025年拨款800万元。请各项目承担单位和项目负责人做好项目组织实施和管理工作，确保按期完成项目研究任务目标。 特此通知。","tags":["科技创新"]},{"id":"sh-stcsm--5806608161915528669","title":"关于开展2026年度上海市技术合同认定登记监督抽查工作的通知","link":"https://stcsm.sh.gov.cn/zwgk/tzgs/zhtz/20260331/876c9d75128a4a44a9ad1c41aaf3a23c.html","date":"2026-03-31","sourceId":"sh-stcsm","source":"上海市科委","summary":"沪科〔2026〕59号 各相关单位： 根据《上海市技术市场条例》《上海市优化营商环境条例》等要求，市科委将开展2026年度上海市技术合同认定登记监督抽查工作，现将有关事项通知如下: 一、监督抽查范围 1. 抽查对象。2023年1月1日至2025年12月31日期间，已取得《上海市技术合同认定登记审核证明》的技术合同登记主体。 2. 组织实施。由上海市技术市场管理办公室统一组织实施。 3. 抽查要求。对同一登记主体，年度内监督抽查频次不超过1次。抽查比例按登记主体总数0.3%的比例抽取，共抽取40家。本年度重点抽查涉及软件类大额技术合同的登记主体。","tags":[]},{"id":"sh-fgw-6685495756497715952","title":"上海市发展改革委关于开展2026年度工程咨询单位监督检查工作的通知","link":"http://fgw.sh.gov.cn/fgw_gdzctz/20260330/49690fab4cc245c4a94858fd19f90837.html","date":"2026-03-30","sourceId":"sh-fgw","source":"上海市发改委","summary":"上海市工程咨询行业协会、本市各工程咨询单位： 根据《工程咨询行业管理办法》（国家发展改革委2017年第9号令）、《关于印发《上海市市场监管领域部门联合抽查事项清单（第二版）》的通知》（沪市监信用［2023］566号）的相关规定，为加强本市工程咨询单位的管理，规范从业行为，现就2026年度工程咨询单位监督检查工作通知如下： 一、检查目的 通过对工程咨询单位开展监督检查、联合抽查，进一步规范本市工程咨询行业单位及其人员执业行为，加强诚信建设，促进工程咨询业高质量发展，切实发挥工程咨询在投资决策、项目实施和经济社会发展中的重要作用。","tags":[]},{"id":"sh-stcsm-4632327454999324130","title":"2026年清明节期间上海市科技政务服务中心受理窗口对外接待服务时间调整通知","link":"https://stcsm.sh.gov.cn/zwgk/tzgs/qttzgs/20260330/899e9fca6d264fb8903d3cf4a54fa349.html","date":"2026-03-30","sourceId":"sh-stcsm","source":"上海市科委","summary":"根据《国务院办公厅关于2026年部分节假日安排的通知》（国办发明电〔2025〕7号）规定，上海市科技政务服务中心（徐汇区中山西路1525号技贸大厦一楼）2026年清明节期间4月4日（周六）至4月6日（周一）放假调休，共3天。4月7日(周二)起正常对外接待。 服务时间：每周一至周五9:00-16:30（最晚取号时间16:15） 请广大市民朋友合理安排办理业务的时间与方式，建议优先通过“一网通办”总门户、随申办APP等渠道提前进行线上预约。 上海市科学技术委员会 2026年3月30日","tags":[]},{"id":"sh-stcsm-9085680649263454866","title":"关于报告我市社会力量设立科学技术奖情况的通知","link":"https://stcsm.sh.gov.cn/zwgk/tzgs/zhtz/20260326/f243428912d64901b7520d3ce8b5bfed.html","date":"2026-03-26","sourceId":"sh-stcsm","source":"上海市科委","summary":"各有关单位： 为了鼓励、引导和推动本市社会力量设立科学技术奖（以下简称“社会科技奖”）规范化发展，根据《社会力量设立科学技术奖管理办法》（国科发奖〔2023〕11号）（以下简称《办法》）的规定，请各有关单位及时书面报告设立科学技术奖情况。在《办法》发布前已经设立的社会科技奖，需重新报告。有关事项通知如下。 1.本通知所称社会科技奖是指社会组织或者个人利用非财政性经费，在上海市设立，奖励我市在基础研究、应用研究、技术开发以及推进科技成果转化应用等活动中为促进科技进步做出突出贡献的个人或组织的经常性科学技术奖。 2.书面报告由社会科技奖设奖者或者承办机构提供。","tags":["科技创新"]},{"id":"sh-fgw-8721268533813435471","title":"关于下达本市2026年节能减排专项资金和超长期特别国债资金安排计划（第五批）的通知","link":"http://fgw.sh.gov.cn/fgw_zyjyhhjbh/20260325/940f87eb8b57445a93b509bc37aa4bed.html","date":"2026-03-25","sourceId":"sh-fgw","source":"上海市发改委","summary":"市商务委、市生态环境局、市交通委、市绿化市容局、市农业农村委： 你们报来的资金使用计划申请函（沪商市场〔2026〕66号，沪商商贸〔2026〕68号，沪交货〔2026〕109号，沪环函〔2026〕13号，沪绿容〔2026〕28、29号，沪农委〔2026〕43号）及有关材料已收悉。经研究，现将资金安排计划下达给你们，共8项，安排市节能减排专项资金95126.7415万元，2026年超长期特别国债36341.105292万元。","tags":["节能环保","农业","商贸消费","交通物流"]},{"id":"sh-fgw--800156727537382169","title":"上海市发展和改革委员会关于车用汽、柴油价格的通知（2026年3月23日）","link":"http://fgw.sh.gov.cn/fgw_jggl/20260323/a1caa726b2324e90b08c3d1ccc92aeee.html","date":"2026-03-23","sourceId":"sh-fgw","source":"上海市发改委","summary":"各区发展改革委、中石化上海石油分公司、中石油上海销售分公司、中海油销售上海分公司： 根据国家发展改革委的有关通知，现就本市车用汽油和车用柴油价格等有关事项通知如下： 一、89号汽油和0号柴油最高零售价格每吨分别为10650元和9570元。各标号汽、柴油最高零售价格详见附件。 各成品油零售企业可在不超过最高零售价格的前提下，自主制定具体零售价格。 二、汽、柴油的最高供应价格和最高批发价格的作价办法仍按市发展改革委沪发改价商〔2008〕019号文件的有关规定执行。 三、上述调整后的价格自2026年3月23日24时起执行。 特此通知。","tags":["商贸消费","能源电力"]},{"id":"sh-fgw--3841109278979357190","title":"关于印发《上海市推进儿童友好城市建设三年行动方案（2026-2028年）》的通知","link":"http://fgw.sh.gov.cn/fgw_zhglqt/20260317/27bc629f2ccb448ba91038b7608e4947.html","date":"2026-03-17","sourceId":"sh-fgw","source":"上海市发改委","summary":"各有关部门和单位： 经市政府同意，现将《上海市推进儿童友好城市建设三年行动方案（2026-2028年）》予以印发，请市、区各相关部门和单位结合职责分工，认真落实各项任务举措。 特此通知。 上海市发展和改革委员会 上海市妇女儿童工作委员会办公室 上海市住房和城乡建设管理委员会 2026年3月4日 上海市推进儿童友好城市建设三年行动方案（2026-2028年） 建设儿童友好城市，为广大儿童成长提供更加适宜的条件、环境和服务，是践行人民城市理念、提升城市软实力的重要举措，事关强国建设、民族复兴后继有人。为高质量推进儿童友好城市建设，根据国家相关文件精神，结合我市实际，制定本行动方案。","tags":["房地产","养老服务"]},{"id":"sh-fgw--4920840009463958961","title":"关于下达本市2026年节能减排专项资金和超长期特别国债资金安排计划（第四批）的通知","link":"http://fgw.sh.gov.cn/fgw_zyjyhhjbh/20260312/39b388d70ae54989bc8997e1eb9960f6.html","date":"2026-03-12","sourceId":"sh-fgw","source":"上海市发改委","summary":"市商务委、市生态环境局、市绿化市容局： 你们报来的资金使用计划申请函（沪商市场〔2026〕46号，沪环函〔2026〕5号，沪绿容〔2025〕187、188号）及有关材料已收悉。经研究，现将资金安排计划下达给你们，共4项，安排市节能减排专项资金19789.9196万元。有关事项通知如下： 一、安排计划 1.按照《2025年上海市电动自行车以旧换新补贴实施细则》（沪商市场〔2025〕212号）规定，安排经审核通过的2025年第十三批2110辆电动自行车以旧换新补贴资金，由市节能减排专项资金安排124.23万元。","tags":["节能环保"]},{"id":"sh-fgw--2231412954705821038","title":"关于做好上海市2026年陆上风电、光伏电站开发建设方案申报工作的通知","link":"http://fgw.sh.gov.cn/fgw_ny/20260310/0faeff0544b0401eadcfccf6e086dd60.html","date":"2026-03-10","sourceId":"sh-fgw","source":"上海市发改委","summary":"各有关单位： 根据《光伏电站开发建设管理办法》（国能发新规〔2022〕104号）、《关于组织开展“千乡万村驭风行动”的通知》（发改能源〔2024〕378号）、《上海市可再生能源项目竞争配置管理办法》（沪发改规范〔2024〕2号）、《关于进一步做好我市光伏发电管理的通知》（沪发改能源〔2025〕189号）等文件要求，现组织开展我市2026年陆上风电、光伏电站开发建设方案申报。有关事项通知如下： 一、申报范围 1.新申报项目。一是2027年6月前核准的陆上风电项目；二是2027年6月前开工的6兆瓦以上集中式光伏项目（利用公共机构以及工商业厂房建筑物及其附属场所建设的光伏项目除外）。","tags":["新能源","房地产","能源电力"]},{"id":"sh-fgw-5741239924059158844","title":"上海市发展和改革委员会关于车用汽、柴油价格的通知（2026年3月9日）","link":"http://fgw.sh.gov.cn/fgw_jggl/20260309/1346e75df23f4b10b1845bda53becd60.html","date":"2026-03-09","sourceId":"sh-fgw","source":"上海市发改委","summary":"各区发展改革委、中石化上海石油分公司、中石油上海销售分公司、中海油销售上海分公司： 根据国家发展改革委的有关通知，现就本市车用汽油和车用柴油价格等有关事项通知如下： 一、89号汽油和0号柴油最高零售价格每吨分别为9490元和8455元。各标号汽、柴油最高零售价格详见附件。 各成品油零售企业可在不超过最高零售价格的前提下，自主制定具体零售价格。 二、汽、柴油的最高供应价格和最高批发价格的作价办法仍按市发展改革委沪发改价商〔2008〕019号文件的有关规定执行。 三、上述调整后的价格自2026年3月9日24时起执行。 特此通知。","tags":["商贸消费","能源电力"]},{"id":"sh-fgw--7004672998726157705","title":"关于我市居民瓶装液化石油气基准价的通知","link":"http://fgw.sh.gov.cn/fgw_jggl/20260309/24fe2bef2baf490bb64c9dfd7990c8b8.html","date":"2026-03-09","sourceId":"sh-fgw","source":"上海市发改委","summary":"各居民瓶装液化石油气经营企业： 根据《关于完善我市居民瓶装液化石油气价格机制有关事项的通知》（沪发改价管〔2023〕16号）等文件的有关规定及液化石油气上游价格变动情况，自3月10日零点起，本市14.5kg包装规格居民瓶装液化石油气基准价为每瓶92元，其他包装规格基准价按每瓶实际容量折算。经营企业可在上浮不超过基准价20%范围内自主制定价格，下浮不限。 各经营企业应合法经营，严禁价格联盟、哄抬价格、实施垄断协议、滥用市场支配地位等价格违法行为。 特此通知。 上海市发展和改革委员会 2026年3月6日","tags":[]},{"id":"sh-fgw--1806132715811072646","title":"关于下达本市2026年节能减排专项资金和超长期特别国债资金安排计划（第三批）的通知","link":"http://fgw.sh.gov.cn/fgw_zyjyhhjbh/20260226/af85c78642db425e90aa39cba8793b66.html","date":"2026-02-26","sourceId":"sh-fgw","source":"上海市发改委","summary":"上海市商务委员会： 你单位报来的资金使用计划申请函（沪商市场〔2026〕36号）及有关材料已收悉。经研究，现将资金安排计划下达给你们，共3项，安排市节能减排专项资金4323.2万元。有关事项通知如下： 一、安排计划 1.按照《2025年上海市落实国家汽车报废更新补贴政策实施细则》（沪商市场〔2025〕20号）规定，安排经审核通过的2025年第十三批103人次国家汽车报废更新补贴资金182.5万元以及2025年国家汽车报废更新补贴未拨付成功资金7.5万元，由市节能减排专项资金安排190万元。","tags":["汽车","节能环保"]},{"id":"sh-fgw-7172071837085382966","title":"关于我市开展气电价格联动调整有关事项的通知","link":"http://fgw.sh.gov.cn/fgw_jggl/20260226/9af29306008f42e39689c7490660e438.html","date":"2026-02-26","sourceId":"sh-fgw","source":"上海市发改委","summary":"国网上海市电力公司，各有关发电企业： 根据《关于优化调整我市天然气发电上网电价机制有关事项的通知》（沪发改价管〔2019〕36号）确定的气电价格联动机制，结合天然气价格调整情况，决定联动调整我市天然气发电上网电价，现将有关事项通知如下。 一、联动调整发电机组上网电价 1.天然气调峰发电机组的电量电价调整为每千瓦时0.5569元。天然气调峰9E系列机组，全年发电利用小时300小时以内的电量电价，在上述电价基础上每千瓦时增加0.15元；全年发电利用小时300（不含）-500（含）小时以内的电量电价，在上述电价基础上每千瓦时增加0.1元；全年发电利用小时500小时（不含）以上的部分不再加价。","tags":["能源电力"]},{"id":"sh-fgw-6529763709861023688","title":"关于调整本市非居民天然气销售基准价格的通知","link":"http://fgw.sh.gov.cn/fgw_jggl/20260226/e57a04a91ec64dd7b153e4ea4304dbdc.html","date":"2026-02-26","sourceId":"sh-fgw","source":"上海市发改委","summary":"各有关单位： 根据《关于本市非居民天然气用户上下游价格联动机制的通知》（沪发改规范〔2022〕10号）相关规定，结合本市天然气上游气源价格变动情况，决定调整非居民用户天然气销售基准价格。调整后的价格见下表： 非居民用户天然气销售基准价格表 单位：元/立方米 用户类别 调整后基准价格 市管网公司直供用户 漕泾热电 2.84 天然气发电厂 2.84 化学工业区 3.16 其他 3.16 一般非居民用户 500万立方米以上 3.69 120-500万立方米 4.12 120万立方米以下 4.16 上述价格自2026年3月1日起执行。","tags":["能源电力"]},{"id":"sh-fgw--2649940466464138154","title":"上海市发展和改革委员会关于车用汽、柴油价格的通知（2026年2月24日）","link":"http://fgw.sh.gov.cn/fgw_jggl/20260224/4de1b989d58b41cab49d2e73df7228aa.html","date":"2026-02-24","sourceId":"sh-fgw","source":"上海市发改委","summary":"各区发展改革委、中石化上海石油分公司、中石油上海销售分公司、中海油销售上海分公司： 根据国家发展改革委的有关通知，现就本市车用汽油和车用柴油价格等有关事项通知如下： 一、89号汽油和0号柴油最高零售价格每吨分别为8795元和7785元。各标号汽、柴油最高零售价格详见附件。 各成品油零售企业可在不超过最高零售价格的前提下，自主制定具体零售价格。 二、汽、柴油的最高供应价格和最高批发价格的作价办法仍按市发展改革委沪发改价商〔2008〕019号文件的有关规定执行。 三、上述调整后的价格自2026年2月24日24时起执行。 特此通知。","tags":["商贸消费","能源电力"]},{"id":"sh-fgw-6708793405606217551","title":"关于印发《上海市政府定价的经营服务性收费目录清单（2026版）》的通知","link":"http://fgw.sh.gov.cn/fgw_jjjctk/20260213/564742ac7e4743e69c0b899a524ddc47.html","date":"2026-02-13","sourceId":"sh-fgw","source":"上海市发改委","summary":"各有关单位： 为贯彻落实国家关于建立健全涉企收费长效监管机制的工作要求，持续优化营商环境，我们制定了《上海市政府定价的经营服务性收费目录清单（2026版）》，现予以公布。 特此通知。 上海市发展和改革委员会 2026年2月12日 相关附件 上海市政府定价的经营服务性收费目录清单（2026版）.xlsx","tags":[]},{"id":"sh-fgw-3012999312977904638","title":"关于进一步做好我市电力现货市场限价相关事项的通知","link":"http://fgw.sh.gov.cn/fgw_jggl/20260211/35cf80d1b101492dacbad5a6c9504c6b.html","date":"2026-02-11","sourceId":"sh-fgw","source":"上海市发改委","summary":"国网上海市电力公司、上海电力交易中心、各有关单位： 根据《国家发展改革委 国家能源局关于印发〈电力现货市场基本规则（试行）〉的通知》（发改能源规〔2023〕1217号）、《国家发展改革委办公厅 国家能源局综合司关于进一步加快电力现货市场建设工作的通知》（发改办体改〔2023〕813号）等文件规定，现就我市电力现货市场限价有关事项通知如下： 一、现货市场申报价格上限综合考虑市场用户电价承受能力、发电企业运营效益，同时参考我市近年工商业用户尖峰电价确定，现货市场运行初期暂定为1.4元/千瓦时。申报价格下限考虑各电源在电力市场外可获得的其他收益等因素确定，现货市场运行初期暂定为0元/千瓦时。","tags":["能源电力"]},{"id":"sh-fgw-7782206425418991610","title":"关于延长《上海市市级建设财力投资补助和贴息项目管理办法》有效期的通知","link":"http://fgw.sh.gov.cn/fgw_gfxwj/20260210/a071baea71b94419bed417fbfcfca792.html","date":"2026-02-10","sourceId":"sh-fgw","source":"上海市发改委","summary":"各有关单位： 2021年1月18日市发展改革委、市财政局印发的《上海市市级建设财力投资补助和贴息项目管理办法》（沪发改规范〔2021〕1号），经评估需继续实施，有效期延长至2031年2月26日。 特此通知。 附件：上海市市级建设财力投资补助和贴息项目管理办法 上海市发展和改革委员会 上海市财政局 2026年2月4日 相关附件 关于印发《上海市市级建设财力投资补助和贴息项目管理办法》的通知.pdf","tags":[]},{"id":"sh-sheitc-zcfg-6783009867772943046","title":"《上海市化工园区认定管理实施细则》 解读说明2026-02-01","link":"https://www.sheitc.sh.gov.cn/sjxwxgzcjd/20260227/d29d8c126b47426fb58cd6971b70348f.html","date":"2026-02-01","sourceId":"sh-sheitc-zcfg","source":"上海市经信委","summary":"202 6 年 2 月 1 日， 根据国家有关要求， 我委会同 市发展改革委、市规划资源局、市生态环境局、市住房城乡建设管理委、市交通委、市应急局 对 《上海市化工园区认定管理实施细则》 （沪经信规范 〔 202 4 〕 2 号 ）进行了修订， 印发了《上海市化工园区认定管理实施细则》 （沪经信规范 〔 202 6 〕 1 号 ） （以下简称《实施细则》），将有关内容解读如下。 一、 修订 背景 2025年 7月31日，工业和信息化部等五部门联合印发《推进化工园区规范建设和高质量发展有关工作的通知》（工信厅联原函〔2025〕317号） ，对各地方化工园区认定实施细则开展复核。","tags":["节能环保","房地产","交通物流"]},{"id":"sh-sheitc-zcfg-772066874079297178","title":"关于印发《上海市化工园区认定管理实施细则》的通知（本细则自2026年2月1日起施行，有效期至2031年1月31日）2026-02-01","link":"https://www.sheitc.sh.gov.cn/sjxwxgwj/20260227/262d2436b08e45a88998a8c53dd2e43e.html","date":"2026-02-01","sourceId":"sh-sheitc-zcfg","source":"上海市经信委","summary":"有关单位： 为规范本市化工园区建设和认定管理，提升化工园区本质安全和绿色发展水平，实现产业可持续高质量发展 ，现将《上海市化工园区认定管理实施细则》印发给你们，请按照执行。 上海市 经济和信息化 委员会 上海市 发展和改革委员会 上海市规划 和自然 资源局 上 海 市 生 态 环 境 局 上海市住房和城乡建设管理委员会 上 海 市 交 通 委 员 会 上 海 市 应 急 管 理 局 202 6 年 1月 27 日 上海市化工园区认定管理实施细则 第一章 总 则 第一条 为规范本市化工园区建设和认定管理，提升化工园区本质安全和绿色发展水平，实现产业可持续高质量发展，根据《化工园区建设标准和认定管…","tags":["房地产"]},{"id":"sh-sheitc-zcfg-1193127436781158830","title":"关于印发《上海市新材料中试基地和中试项目管理办法》的通知（本办法自2026年1月12日起施行，有效期至2031年1月11日）2026-01-12","link":"https://www.sheitc.sh.gov.cn/sjxwxgwj/20260122/b8a53cc3b72e4aa6b783c5ad14bc0b7f.html","date":"2026-01-12","sourceId":"sh-sheitc-zcfg","source":"上海市经信委","summary":"有关单位： 为推动 本 市新材料科技创新，提高研发产业化水平，解决科技成果转化中试环节 “断链”问题 ， 现将《 上海市新材料 中试基地和中试项目管理办法》印发给你们，请 按照 执行。 上海市 经济和信息化 委员会 上海市 发展和改革委员会 上 海 市 教 育 委 员 会 上海市科学技术委员会 上海市规划和自然资源局 上 海 市 生 态 环 境 局 上 海 市 应 急 管 理 局 202 5 年 12 月 30日 上海市新材料中试基地和中试项目管理办法 第一章 总 则 第一条 中试是将科研成果转向工业化生产的过渡性试验，是加速科研成果产业化的关键环节。","tags":["新材料","科技创新"]},{"id":"sh-sheitc-zcfg--5815918496875237943","title":"《上海市新材料中试基地和中试项目管理办法》解读说明2026-01-12","link":"https://www.sheitc.sh.gov.cn/sjxwxgzcjd/20260119/ffed419c7ac6491392a2e39b59a777c1.html","date":"2026-01-12","sourceId":"sh-sheitc-zcfg","source":"上海市经信委","summary":"为提高 本 市新材料研发成果产业化水平，解决科技成果转化中试环节 “ 断链 ” 问题， 推进新材料研发产业化， 规范新材料中试基地 和 新材料中试项目的建设和管理， 市经济信息化委联合市发展改革委、市教委、市科委、市规划资源局、市生态环境局、市应急局 等部门，对 《上海市新材料中试基地和中试项目管理办法（试行）》 进行了修订 ， 现将有关情况说明如下： 一、制定背景 一代材料 、 一代装备 、 一代产业， 先进 材料是制造业发展的基础， 发挥 着 推动 产业 经济 高质量发展的重要支撑 作用。","tags":["新材料","智能制造","节能环保","科技创新"]},{"id":"sh-sheitc-zcfg-2136755543385393486","title":"《上海市促进高成长企业加快发展管理实施细则 （试行）》解读说明2025-12-22","link":"https://www.sheitc.sh.gov.cn/sjxwxgzcjd/20251222/2282d69ce2a5444d89da161f2bd594c5.html","date":"2025-12-22","sourceId":"sh-sheitc-zcfg","source":"上海市经信委","summary":"为贯彻落实党中央、国务院关于培育高成长企业的决策部署，加快构建本市高成长企业梯度培育体系， 市经济信息化委会同相关部门研究形成了 《 上海市促进高成长企业加快发展管理实施细则 （试行） 》（ 以下简称《实施细则》 ）。 现就相关内容解读如下 ： 一、 制定《实施细则》的主要考虑是什么？ 瞪羚、独角兽等 高成长企业具有高增长性、高价值性、强创新性 等 特征，是引领新兴产业发展、培育激发新动能的重要力量。 2025 年国务院政府工作报告提出 “ 支持独角兽企业、瞪羚企业发展，让更多企业在新领域新赛道跑出加速度 ” 。","tags":[]},{"id":"sh-sheitc-zcfg--8722383707764349886","title":"《上海市重点产业领域人才专项奖励实施办法》政策解读2025-11-27","link":"https://www.sheitc.sh.gov.cn/sjxwxgzcjd/20251128/6f0f51b84e184d84999eb30d31d240e3.html","date":"2025-11-27","sourceId":"sh-sheitc-zcfg","source":"上海市经信委","summary":"为便于本市重点产业领域企业、相关人才及各有关部门准确理解《上海市重点产业领域人才专项奖励实施办法》（沪经信规范〔 2025〕5号）的核心要义、修订亮点及实施要求，推动政策精准落地，现结合修订背景，作如下解读： 一、出台背景 （一）政策沿革 上一轮《上海市重点产业领域人才专项奖励实施办法》（沪经信规范〔 2022〕11号）于2024年12月实施期满。上海市经济和信息化委员会、上海市财政局立足新型工业化推进需求，聚焦现代化产业体系建设，以人才激励为抓手，充分发挥人才引领产业高质量发展的核心作用，制定本《办法》。","tags":[]},{"id":"sh-sheitc-zcfg--956692072267859794","title":"《上海市无线电领域信用分级分类监督管理办法》解读说明2025-11-19","link":"https://www.sheitc.sh.gov.cn/sjxwxgzcjd/20251119/e5bde09de25440d6b34b5d68cdf1bed5.html","date":"2025-11-19","sourceId":"sh-sheitc-zcfg","source":"上海市经信委","summary":"为落实国家和本市加快推进社会信用体系建设、构建以信用为基础的新型监管机制相关部署，进一步提升无线电领域监管效能，鉴于原《上海市无线电领域信用分级分类监督管理办法（试行）》 （ 沪经信规范［ 2023〕1号 ） 有效期届满，结合前期实施情况 和《上海市人民政府办公厅关于规范本市涉企行政检查的实施意见》的最新要求 ， 我委修订 形成《上海市无线电领域信用分级分类监督管理办法 》 （ 以下简称《 管理 办法》） 。 现将相关内容解读如下。","tags":[]},{"id":"sh-sheitc-zcfg--3075093959310943446","title":"【一图读懂】《上海市智能终端产业高质量发展行动方案（2026-2027年）》2025-10-14","link":"https://www.sheitc.sh.gov.cn/sjxwxgzcjd/20251106/a71873ed8f4641a7a48d7edbc408da57.html","date":"2025-10-14","sourceId":"sh-sheitc-zcfg","source":"上海市经信委","summary":"[返回]","tags":[]},{"id":"sh-sheitc-zcfg--2362859095269790744","title":"上海市经济和信息化委员会行政规范性文件清理情况2025-09-30","link":"https://www.sheitc.sh.gov.cn/sxwjql/20260129/de13f2a3a2304224879a5019e158225c.html","date":"2025-09-30","sourceId":"sh-sheitc-zcfg","source":"上海市经信委","summary":"根据《上海市行政规范性文件管理规定》（上海市人民政府令第 17 号） 《 上海市行政规范性文件管理实施办法 》（ 沪府办发〔 2023 〕 17 号 ） 要求，经清理，截至 202 5 年 9 月 30 日，市经济信息化委现行有效的行政规范性文件共 3 5 件。 上海市经济和信息化委员会 202 5 年 9 月 30 日 规范性文件列表 序号 名称 文号 1 上海市经济信息化委 市发展改革委 市科委市规划资源局 市生态环境局关于印发《规划产业区块外优质项目认定工作指引》的通知 沪经信规范〔2020〕9号 2 上海市经济信息化委 市发展改革委 市规划资源局 生态环境局印发《关于促进本市生产性服务…","tags":["节能环保"]},{"id":"sh-sheitc-zcfg--5570042113719133060","title":"上海市经济和信息化委员会 上海市财政局关于印发《上海市中小企业发展专项资金管理办法 （暂行）》的通知（本办法自2025年9月8日起施行，有效期至2027年9月7日）2025-09-08","link":"https://www.sheitc.sh.gov.cn/sjxwxgwj/20250909/88322a15f76f424989f23a49915e14dd.html","date":"2025-09-08","sourceId":"sh-sheitc-zcfg","source":"上海市经信委","summary":"有关单位： 为贯彻落实国家及本市促进中小企 业发展相关政策，支持中小企业创业创新，促进中小企业持续健康发展 ， 现将《上海市中小企业发展专项资金管理办法（暂行）》印发给你们，请按照执行。 上海市经济和信息化委员会 上 海 市 财 政 局 2025年9月1日 上海市中小企业发展专项资金管理办法（暂行） 第一章 总 则 第一条（目的和依据） 为贯彻落实国家及本市促进中小企业发展相关政策，支持中小企业创业创新，促进中小企业持续健康发展，根据《上海市促进中小企业发展条例》 、 《中小企业发展专项资金管理办法》 （财建〔 2021〕148号） 以及财政资金管理的有关规定，结合本市实际，制定本办法。","tags":["中小企业"]},{"id":"sh-sheitc-zxzj-5505914865233117116","title":"上海市经济信息化委关于组织2025年上海市促进产业 高质量发展专项资金智能工厂领域项目申报的通知","link":"https://www.sheitc.sh.gov.cn/cyfz/20250811/df61f7d5d6f346b7bff43cba465ae3d6.html","date":"2025-08-11","sourceId":"sh-sheitc-zxzj","source":"上海市经信委专项资金","summary":"各区经委（商务委）、科委、有关单位： 为加强高端产业引领，加快现代化产业体系构建，充分发挥智能制造推动上海经济高质量发展核心驱动力作用，着力提升本市制造业智能化水平。市经济信息化委制定了《上海市促进产业高质量发展专项资金智能工厂领域项目指南》，现印发你单位。请按照申报指南要求，组织本领域或区域符合条件的企业单位开展项目申报工作。","tags":["智能制造"]},{"id":"sh-sheitc-zxzj-1304664644235800524","title":"上海市经济信息化委关于开展2025年度上海市工业通信业节能减排和合同能源管理专项资金项目 （能源管理中心）申报工作的通知","link":"https://www.sheitc.sh.gov.cn/cyfz/20250305/e498286e4ecc4c3ba7f84b936398fe12.html","date":"2025-03-05","sourceId":"sh-sheitc-zxzj","source":"上海市经信委专项资金","summary":"有关单位： 为贯彻落实《上海市节能减排（应对气候变化）专项管理资金管理办法（沪发改规范〔 2021〕5号）》和《上海市工业通信 业节能减排和合同能源管理专项扶持办法》（沪经信规范〔 2023〕 5号），鼓励能源管理中心建设，现组织开展2025年度上海市工 业通信业节能减排和合同能源管理专项资金项目（能源管理中心） 申报工作，并将有关事项通知如下： 一、专项资金支持范围 能源管理中心建设项目主要支持本市工行业用能单位、数据中心、园区用于能源管理中心建设中能源计量、数据采集、信息上传等内容的投资。","tags":["节能环保","能源电力"]},{"id":"sh-sheitc-zxzj-4591662105018859103","title":"上海市经济信息化委关于开展2025年度上海市工业通信业节能减排和合同能源管理专项资金项目申报工作的通知","link":"https://www.sheitc.sh.gov.cn/cyfz/20250305/168c72d3b7c64c10b0422fd057529265.html","date":"2025-03-05","sourceId":"sh-sheitc-zxzj","source":"上海市经信委专项资金","summary":"有关单位： 为贯彻落实《上海市节能减排（应对气候变化）专项资金管理办法》（沪发改规范〔 2021〕5号）和《上海市工业通信业节能减排和合同能源管理专项扶持办法》（沪经信规范〔2023〕5号），推动企业积极开展绿色低碳化改造、建立绿色制造体系、提升能源管理能力，现组织开展2025年度上海市工业通信业节能减排和合同能源管理专项 资金 项目申报工作，并将有关事项通知如下： 一、专项资金支持范围 专项资金主要支持绿色低碳工艺升级和新技术应用、节能技术改造、合同能源管理、能源管理体系、绿色制造体系示范、能源审计和节能诊断服务（能源管理中心、清洁生产、清洁生产服务申报通知另行发布）。","tags":["节能环保","能源电力"]},{"id":"sh-sheitc-zxzj-2928266115620319536","title":"上海市经济信息化委关于开展2025年度上海市工业通信业节能减排和合同能源管理专项资金项目（清洁生产）申报工作的通知","link":"https://www.sheitc.sh.gov.cn/cyfz/20250305/dcb0c76db4204db2a77fdcca6c37c579.html","date":"2025-03-05","sourceId":"sh-sheitc-zxzj","source":"上海市经信委专项资金","summary":"有关单位： 为贯彻落实《上海市节能减排（应对气候变化）专项资金管理办法》（沪发改规范〔 2021〕5号）和《上海市工业通信业节能减排和合同能源管理专项扶持办法》（沪经信规范〔2023〕5号），进一步鼓励和引导企业加大清洁生产改造投入，实现“节能、降耗、减污、增效”的目标，现组织开展2025年度上海市清洁生产专项资金项目申报工作，并将有关事项通知如下： 一、支持范围 （一）清洁生产 按照《上海市鼓励企业实施清洁生产专项扶持评价细则》（附件 1）规定，完成所有改造项目且通过审核验收的清洁生产项目。","tags":["节能环保","能源电力"]},{"id":"sh-sheitc-zxzj-3688408098590655669","title":"上海市经济信息化委关于开展2025年度上海市工业通信业用能设备更新专项扶持资金项目申报工作的通知","link":"https://www.sheitc.sh.gov.cn/cyfz/20250214/3746a67bfcee4e12927242056f5f426f.html","date":"2025-02-14","sourceId":"sh-sheitc-zxzj","source":"上海市经信委专项资金","summary":"有关单位： 为贯彻落实《上海市节能减排（应对气候变化）专项资金管理办法（沪发改规范〔 2021〕5号）》和《上海市工业通信业用能设备更新专项扶持实施细则》（沪经信规 范 〔 2025〕1号），进一步推进本市工业通信业用能设备更新工作，现组织开展2025年度上海市工业通信业用能设备更新专项扶持资金项目申报工作，并将有关事项通知如下： 一、专项资金支持范围 （一）支持本市工业通信业企业采购 1级能效、2级能效及符合《重点用能产品设备能效先进水平、节能水平和准入水平》中节能水平及以上的用能设备。","tags":["节能环保"]},{"id":"sh-sheitc-zxzj-3906906818461222869","title":"2024年上海市中小企业发展专项资金分配结果、管理办法、操作流程图、绩效目标表","link":"https://www.sheitc.sh.gov.cn/bmys/20250213/5fbe70bf5a304e38b87334505892354e.html","date":"2025-02-13","sourceId":"sh-sheitc-zxzj","source":"上海市经信委专项资金","summary":"附件：上海市中小企业发展专项资金2024年分配结果.pdf 附件：上海市中小企业发展专项资金绩效目标表.pdf 附件：上海市中小企业发展专项资金操作流程图.pdf 附件：上海市中小企业发展专项资金管理办法.pdf [返回] 【市民留言】","tags":["中小企业"]},{"id":"sh-sheitc-zxzj-909388610077860903","title":"上海市经济信息化委关于开展2025年上海市中小企业发展专项资金项目申报工作的通知","link":"https://www.sheitc.sh.gov.cn/zxqy/20250108/48756f44454d43bdb62ae0eb8b43446b.html","date":"2025-01-08","sourceId":"sh-sheitc-zxzj","source":"上海市经信委专项资金","summary":"各区经委（商务委、科经委、新工办）、有关单位： 为贯彻《上海市促进中小企业发展条例》，支持本市中小企业高质量发展，根据《上海市中小企业发展专项资金管理办法》，现就开展 2025年度上海市中小企业发展专项资金项目申报工作的有关事项通知如下： 一、支持范围和内容 符合 2025年度上海市中小企业发展专项资金项目指南（以下简称“指南”）（详见附件1）的支持领域。","tags":["中小企业"]},{"id":"sh-sheitc-zxzj--7720304429701524554","title":"关于向社会公开征求《上海市中小企业发展专项资金管理办法（征求意见稿）》意见的通知","link":"https://www.sheitc.sh.gov.cn/gg/20240822/7e74d7eb4fe1485fb7b93667b3ce5a56.html","date":"2024-08-21","sourceId":"sh-sheitc-zxzj","source":"上海市经信委专项资金","summary":"为贯彻落实财政部 《中小企业发展专项资金管理办法》、 促进中小企业高质量发展要求，充分发挥财政资金引导带动作用，我委会同相关部门对《 上海市中小企业发展专项资金管理办法 》进行了修订，形成了《 上海市中小企业发展专项资金管理办法（征求意见稿） 》（以下简称《管理办法》）。 现公开面向社会征求意见，欢迎提出宝贵意见与建议。 公示日期： 202 4 年 8 月 21 日至 202 4 年 8 月 30 日 联 系 人： 吴春霞 联系电话： 23 117616 传 真： 64228018 电子信箱： wucx @sheitc.sh.gov.cn 。","tags":["中小企业"]},{"id":"sh-sheitc-zxzj--5877397900933629302","title":"上海市经济信息化委关于开展2024年上海市中小企业发展专项资金项目申报工作的通知","link":"https://www.sheitc.sh.gov.cn/zxqy/20240415/a0e3a5dd934340dab5dfdcdbb767e98b.html","date":"2024-04-15","sourceId":"sh-sheitc-zxzj","source":"上海市经信委专项资金","summary":"各区经委（商务委、科经委）、有关单位： 为贯彻《上海市促进中小企业发展条例》，支持 本市 中小企业 高质量发展 ，根据《上海市中小企业发展专项资金管理办法》（沪经信规范〔 2019〕9号），现就开展202 4 年度上海市中小企业发展专项资金项目申报工作的有关事项通知如下： 一、支持范围和内容 符合 202 4 年度上海市中小企业发展专项资金项目指南（以下简称 “指南”）（详见附件1）的支持领域。","tags":["中小企业"]},{"id":"sh-sheitc-zxzj--3712030725426090512","title":"上海市经济信息化委关于开展2024年度 上海市工业通信业节能减排和合同能源管理专项资金项目（清洁生产）申报工作的通知","link":"https://www.sheitc.sh.gov.cn/jnzhly/20240329/95193df8693f4c06a8cb1bd0bd3e160a.html","date":"2024-03-29","sourceId":"sh-sheitc-zxzj","source":"上海市经信委专项资金","summary":"有关单位： 为贯彻落实《上海市节能减排（应对气候变化）专项资金管理办法》（沪发改 规范〔2021〕5号）和《上海市工业通信业节能减排和合同能源管理专项扶持办法》（沪经信规范〔2023〕5号），进一步鼓励和引导企业加大清洁生产改造投入，实现“节能、降耗、减污、增效”的目标，现组织开展202 4 年度上海市清 洁生产专项资金项目申报工作，并将有关事项通知如下： 一、支持范围 （一）清洁生产 按照《上海市鼓励企业实施清洁生产专项扶持评价细则》（附件1）规定，完成所有改造项目且通过审核验收的清洁生产项目。","tags":["节能环保","能源电力"]}]};
+  </script>
+  <script>
+    (function() {
+      const data = window.POLICY_DATA;
+
+      const state = {
+        filters: {
+          search: '',
+          sources: data.sources.map(s => s.id),
+          tag: 'all',
+          dateRange: 'all',
+          customStart: '',
+          customEnd: '',
+        },
+        sort: 'desc',
+        pagination: {
+          page: 1,
+          pageSize: 20,
+        },
+      };
+
+      function debounce(fn, ms) {
+        let t;
+        return function(...args) {
+          clearTimeout(t);
+          t = setTimeout(() => fn.apply(this, args), ms);
+        };
+      }
+
+      function formatDateLabel(range) {
+        const map = { 'all': '全部时间', '7d': '近7天', '30d': '近30天', '90d': '近90天', 'custom': '自定义' };
+        return map[range] || range;
+      }
+
+      function getFilteredPolicies() {
+        return data.policies.filter(p => {
+          if (!state.filters.sources.includes(p.sourceId)) return false;
+          if (state.filters.tag !== 'all' && !p.tags.includes(state.filters.tag)) return false;
+          if (state.filters.dateRange !== 'all') {
+            const policyDate = new Date(p.date);
+            const now = new Date();
+            if (state.filters.dateRange === 'custom') {
+              if (state.filters.customStart && policyDate < new Date(state.filters.customStart)) return false;
+              if (state.filters.customEnd && policyDate > new Date(state.filters.customEnd)) return false;
+            } else {
+              const days = { '7d': 7, '30d': 30, '90d': 90 }[state.filters.dateRange];
+              const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+              cutoff.setHours(0,0,0,0);
+              if (policyDate < cutoff) return false;
+            }
+          }
+          if (state.filters.search) {
+            const q = state.filters.search.toLowerCase();
+            const text = (p.title + ' ' + p.source + ' ' + p.summary + ' ' + p.tags.join(' ')).toLowerCase();
+            if (!text.includes(q)) return false;
+          }
+          return true;
+        }).sort((a, b) => {
+          const da = new Date(a.date), db = new Date(b.date);
+          return state.sort === 'desc' ? db - da : da - db;
+        });
+      }
+
+      function renderStats() {
+        const badgeContainer = document.getElementById('source-badges');
+        badgeContainer.innerHTML = '';
+        data.sources.forEach(s => {
+          const count = data.policies.filter(p => p.sourceId === s.id).length;
+          if (count > 0) {
+            const badge = document.createElement('span');
+            badge.className = 'inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700 border border-gray-200';
+            badge.textContent = s.name + ' ' + count;
+            badgeContainer.appendChild(badge);
+          }
+        });
+      }
+
+      function renderSourceDropdown() {
+        const container = document.getElementById('source-options');
+        container.innerHTML = '';
+        data.sources.forEach(s => {
+          const label = document.createElement('label');
+          label.className = 'flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer rounded';
+          label.innerHTML = `<input type="checkbox" value="${s.id}" class="source-checkbox w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500" ${state.filters.sources.includes(s.id) ? 'checked' : ''}> <span class="text-sm text-gray-700">${s.name}</span>`;
+          container.appendChild(label);
+        });
+      }
+
+      function renderTagDropdown() {
+        const container = document.getElementById('tag-options');
+        container.innerHTML = '';
+        const allBtn = document.createElement('button');
+        allBtn.className = 'tag-option w-full text-left px-3 py-2 rounded text-sm ' + (state.filters.tag === 'all' ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100');
+        allBtn.textContent = '全部标签';
+        allBtn.dataset.value = 'all';
+        container.appendChild(allBtn);
+        data.allTags.forEach(tag => {
+          const btn = document.createElement('button');
+          btn.className = 'tag-option w-full text-left px-3 py-2 rounded text-sm ' + (state.filters.tag === tag ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100');
+          btn.textContent = tag;
+          btn.dataset.value = tag;
+          container.appendChild(btn);
+        });
+      }
+
+      function renderActiveFilters() {
+        const container = document.getElementById('active-filters');
+        const list = document.getElementById('active-filters-list');
+        list.innerHTML = '';
+        let hasAny = false;
+
+        if (state.filters.search) {
+          hasAny = true;
+          list.appendChild(createFilterTag('搜索: ' + state.filters.search, () => { state.filters.search = ''; document.getElementById('search-input').value = ''; renderAll(); }));
+        }
+        const isPartialSourceFilter = state.filters.sources.length > 0 && state.filters.sources.length < data.sources.length;
+        if (isPartialSourceFilter) {
+          hasAny = true;
+          const sourceNames = state.filters.sources.map(id => {
+            const s = data.sources.find(x => x.id === id);
+            return s ? s.name : id;
+          });
+          list.appendChild(createFilterTag('来源: ' + sourceNames.join('、'), () => {
+            state.filters.sources = data.sources.map(s => s.id);
+            renderSourceDropdown();
+            renderAll();
+          }));
+        }
+        if (state.filters.tag !== 'all') {
+          hasAny = true;
+          list.appendChild(createFilterTag('标签: ' + state.filters.tag, () => { state.filters.tag = 'all'; renderTagDropdown(); renderAll(); }));
+        }
+        if (state.filters.dateRange !== 'all') {
+          hasAny = true;
+          let label = formatDateLabel(state.filters.dateRange);
+          if (state.filters.dateRange === 'custom' && (state.filters.customStart || state.filters.customEnd)) {
+            label += ' (' + (state.filters.customStart || '') + ' ~ ' + (state.filters.customEnd || '') + ')';
+          }
+          list.appendChild(createFilterTag(label, () => { state.filters.dateRange = 'all'; document.getElementById('custom-start').value = ''; document.getElementById('custom-end').value = ''; renderAll(); }));
+        }
+
+        container.classList.toggle('hidden', !hasAny);
+        const sourceBadge = document.getElementById('source-badge');
+        sourceBadge.textContent = state.filters.sources.length;
+        sourceBadge.classList.toggle('hidden', !isPartialSourceFilter);
+        const tagBadge = document.getElementById('tag-badge');
+        tagBadge.textContent = state.filters.tag === 'all' ? '0' : '1';
+        tagBadge.classList.toggle('hidden', state.filters.tag === 'all');
+      }
+
+      function createFilterTag(text, onRemove) {
+        const span = document.createElement('span');
+        span.className = 'inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full';
+        span.innerHTML = `<span>${text}</span><button class="hover:text-blue-900 leading-none" aria-label="移除"><i class="fa fa-times"></i></button>`;
+        span.querySelector('button').addEventListener('click', onRemove);
+        return span;
+      }
+
+      function renderPolicyList() {
+        const filtered = getFilteredPolicies();
+        const sorted = filtered;
+        const pageSize = state.pagination.page * state.pagination.pageSize;
+        const paginated = sorted.slice(0, pageSize);
+        const hasMore = sorted.length > paginated.length;
+
+        const listEl = document.getElementById('policy-list');
+        listEl.innerHTML = '';
+
+        document.getElementById('result-count').textContent = `共 ${sorted.length} 条`;
+        document.getElementById('empty-state').classList.toggle('hidden', paginated.length > 0);
+        document.getElementById('load-more-container').classList.toggle('hidden', !hasMore);
+
+        if (paginated.length === 0) return;
+
+        paginated.forEach(item => {
+          const li = document.createElement('li');
+          li.className = 'px-4 sm:px-6 py-4 hover:bg-gray-50 transition';
+          const summary = item.summary || '';
+          const summaryHtml = summary ? `<p class="text-sm text-slate-600 line-clamp-2 sm:line-clamp-3 mt-1">${escapeHtml(summary)}</p>` : '';
+          const tagsHtml = (item.tags && item.tags.length) ? `<div class="flex flex-wrap gap-1 mt-1">${item.tags.map(t => `<span class="tag-pill cursor-pointer inline-flex items-center px-2 py-0.5 rounded text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 hover:bg-emerald-100 transition" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</span>`).join('')}</div>` : '';
+          li.innerHTML = `
+            <div class="flex flex-col gap-1">
+              <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 sm:gap-2">
+                <a href="${item.link}" target="_blank" class="text-base font-medium text-slate-800 hover:text-blue-600 transition line-clamp-2">${escapeHtml(item.title)}</a>
+                <span class="text-sm text-slate-400 whitespace-nowrap shrink-0">${item.date}</span>
+              </div>
+              <div class="flex items-center gap-2 text-sm">
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-50 text-blue-700 border border-blue-100">${escapeHtml(item.source)}</span>
+              </div>
+              ${summaryHtml}
+              ${tagsHtml}
+            </div>
+          `;
+          listEl.appendChild(li);
+        });
+        // Bind tag click events
+        listEl.querySelectorAll('.tag-pill').forEach(pill => {
+          pill.addEventListener('click', () => {
+            state.filters.tag = pill.dataset.tag;
+            state.pagination.page = 1;
+            renderTagDropdown();
+            renderAll();
+          });
+        });
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      function renderAll() {
+        renderStats();
+        renderActiveFilters();
+        renderPolicyList();
+      }
+
+      function showToast(message, type = 'success') {
+        let toast = document.getElementById('page-toast');
+        if (!toast) {
+          toast = document.createElement('div');
+          toast.id = 'page-toast';
+          toast.className = 'fixed top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg shadow-lg text-sm font-medium z-50 transition-opacity duration-300 opacity-0';
+          document.body.appendChild(toast);
+        }
+        toast.className = 'fixed top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg shadow-lg text-sm font-medium z-50 transition-opacity duration-300 ' + (type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white');
+        toast.textContent = message;
+        toast.style.opacity = '1';
+        setTimeout(() => { toast.style.opacity = '0'; }, 2500);
+      }
+
+      async function refreshFromRSS() {
+        const icon = document.getElementById('refresh-icon');
+        icon.classList.add('fa-spin');
+        try {
+          const res = await fetch(data.rssLink + '?t=' + Date.now());
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const xmlText = await res.text();
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(xmlText, 'application/xml');
+          const parserError = doc.querySelector('parsererror');
+          if (parserError) throw new Error('XML parse error');
+
+          const sourceNameToId = {};
+          data.sources.forEach(s => sourceNameToId[s.name] = s.id);
+
+          const items = Array.from(doc.querySelectorAll('item'));
+          const policies = [];
+          const allTags = new Set();
+
+          items.forEach(item => {
+            const title = item.querySelector('title')?.textContent?.trim() || '';
+            const link = item.querySelector('link')?.textContent?.trim() || '';
+            const pubDate = item.querySelector('pubDate')?.textContent?.trim() || '';
+            const description = item.querySelector('description')?.textContent?.trim() || '';
+            const sourceName = item.querySelector('source')?.textContent?.trim() || '';
+
+            let summary = '';
+            const brIdx = description.indexOf('<br/>');
+            if (brIdx !== -1) {
+              summary = description.slice(brIdx + 5).trim();
+            } else if (description.startsWith('来源:')) {
+              const lines = description.split(/[\n\r]+/);
+              summary = lines.slice(1).join(' ').trim();
+            } else {
+              summary = description;
+            }
+
+            const d = new Date(pubDate);
+            const dateStr = isNaN(d) ? '' : d.toISOString().slice(0, 10);
+
+            const tags = Array.from(item.querySelectorAll('category')).map(c => c.textContent.trim()).filter(Boolean);
+            tags.forEach(t => allTags.add(t));
+
+            policies.push({
+              id: link + '-' + hashCode(title),
+              title,
+              link,
+              date: dateStr,
+              sourceId: sourceNameToId[sourceName] || '',
+              source: sourceName,
+              summary,
+              tags,
+            });
+          });
+
+          data.policies = policies;
+          data.allTags = Array.from(allTags).sort();
+          data.meta.totalCount = policies.length;
+          data.meta.updatedAt = new Date().toLocaleString('zh-CN', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(/\//g, '-');
+
+          state.filters.sources = data.sources.map(s => s.id);
+          state.filters.tag = 'all';
+          state.filters.dateRange = 'all';
+          state.filters.search = '';
+          state.pagination.page = 1;
+
+          document.getElementById('search-input').value = '';
+          document.getElementById('search-clear').classList.add('hidden');
+          document.getElementById('custom-start').value = '';
+          document.getElementById('custom-end').value = '';
+
+          renderTagDropdown();
+          updateDateDropdownUI();
+          updateSortDropdownUI();
+          renderAll();
+          showToast('数据已刷新', 'success');
+        } catch (e) {
+          console.error(e);
+          showToast('刷新失败：' + (e.message || '无法加载 RSS'), 'error');
+        } finally {
+          icon.classList.remove('fa-spin');
+        }
+      }
+
+      function hashCode(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+          const char = str.charCodeAt(i);
+          hash = ((hash << 5) - hash) + char;
+          hash = hash & hash;
+        }
+        return hash;
+      }
+
+      function bindEvents() {
+        const searchInput = document.getElementById('search-input');
+        const searchClear = document.getElementById('search-clear');
+        const sourceBtn = document.getElementById('source-dropdown-btn');
+        const sourcePanel = document.getElementById('source-dropdown-panel');
+        const tagBtn = document.getElementById('tag-dropdown-btn');
+        const tagPanel = document.getElementById('tag-dropdown-panel');
+        const dateBtn = document.getElementById('date-dropdown-btn');
+        const datePanel = document.getElementById('date-dropdown-panel');
+        const sortBtn = document.getElementById('sort-dropdown-btn');
+        const sortPanel = document.getElementById('sort-dropdown-panel');
+
+        function closeAllPanels(except) {
+          if (except !== 'source') sourcePanel.classList.add('hidden');
+          if (except !== 'tag') tagPanel.classList.add('hidden');
+          if (except !== 'date') datePanel.classList.add('hidden');
+          if (except !== 'sort') sortPanel.classList.add('hidden');
+        }
+
+        searchInput.addEventListener('input', debounce(() => {
+          state.filters.search = searchInput.value.trim();
+          state.pagination.page = 1;
+          searchClear.classList.toggle('hidden', !state.filters.search);
+          renderAll();
+        }, 200));
+        searchClear.addEventListener('click', () => {
+          searchInput.value = '';
+          state.filters.search = '';
+          searchClear.classList.add('hidden');
+          state.pagination.page = 1;
+          renderAll();
+        });
+
+        sourceBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const willShow = sourcePanel.classList.contains('hidden');
+          closeAllPanels();
+          if (willShow) sourcePanel.classList.remove('hidden');
+        });
+        document.getElementById('source-options').addEventListener('change', (e) => {
+          if (e.target.classList.contains('source-checkbox')) {
+            const val = e.target.value;
+            if (e.target.checked) {
+              if (!state.filters.sources.includes(val)) state.filters.sources.push(val);
+            } else {
+              state.filters.sources = state.filters.sources.filter(id => id !== val);
+            }
+            state.pagination.page = 1;
+            renderAll();
+          }
+        });
+        document.getElementById('source-select-all').addEventListener('click', () => {
+          state.filters.sources = data.sources.map(s => s.id);
+          renderSourceDropdown();
+          state.pagination.page = 1;
+          renderAll();
+        });
+        document.getElementById('source-clear').addEventListener('click', () => {
+          state.filters.sources = [];
+          renderSourceDropdown();
+          state.pagination.page = 1;
+          renderAll();
+        });
+
+        tagBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const willShow = tagPanel.classList.contains('hidden');
+          closeAllPanels();
+          if (willShow) tagPanel.classList.remove('hidden');
+        });
+        document.getElementById('tag-options').addEventListener('click', (e) => {
+          if (e.target.classList.contains('tag-option')) {
+            state.filters.tag = e.target.dataset.value;
+            state.pagination.page = 1;
+            renderTagDropdown();
+            renderAll();
+          }
+        });
+
+        dateBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const willShow = datePanel.classList.contains('hidden');
+          closeAllPanels();
+          if (willShow) datePanel.classList.remove('hidden');
+        });
+        datePanel.querySelectorAll('.date-option').forEach(btn => {
+          btn.addEventListener('click', () => {
+            state.filters.dateRange = btn.dataset.value;
+            if (state.filters.dateRange !== 'custom') {
+              document.getElementById('custom-start').value = '';
+              document.getElementById('custom-end').value = '';
+              state.filters.customStart = '';
+              state.filters.customEnd = '';
+            }
+            state.pagination.page = 1;
+            renderAll();
+            updateDateDropdownUI();
+          });
+        });
+        document.getElementById('custom-start').addEventListener('change', (e) => {
+          state.filters.dateRange = 'custom';
+          state.filters.customStart = e.target.value;
+          state.pagination.page = 1;
+          renderAll();
+          updateDateDropdownUI();
+        });
+        document.getElementById('custom-end').addEventListener('change', (e) => {
+          state.filters.dateRange = 'custom';
+          state.filters.customEnd = e.target.value;
+          state.pagination.page = 1;
+          renderAll();
+          updateDateDropdownUI();
+        });
+
+        sortBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const willShow = sortPanel.classList.contains('hidden');
+          closeAllPanels();
+          if (willShow) sortPanel.classList.remove('hidden');
+        });
+        sortPanel.querySelectorAll('.sort-option').forEach(btn => {
+          btn.addEventListener('click', () => {
+            state.sort = btn.dataset.value;
+            state.pagination.page = 1;
+            renderAll();
+            updateSortDropdownUI();
+          });
+        });
+
+        document.addEventListener('click', () => {
+          closeAllPanels();
+        });
+
+        // Reset
+        document.getElementById('reset-btn').addEventListener('click', () => {
+          state.filters.search = '';
+          state.filters.sources = data.sources.map(s => s.id);
+          state.filters.tag = 'all';
+          state.filters.dateRange = 'all';
+          state.filters.customStart = '';
+          state.filters.customEnd = '';
+          state.sort = 'desc';
+          state.pagination.page = 1;
+          searchInput.value = '';
+          searchClear.classList.add('hidden');
+          document.getElementById('custom-start').value = '';
+          document.getElementById('custom-end').value = '';
+          renderSourceDropdown();
+          renderTagDropdown();
+          updateDateDropdownUI();
+          updateSortDropdownUI();
+          renderAll();
+        });
+
+        // Clear all filters
+        document.getElementById('clear-all-filters').addEventListener('click', () => {
+          state.filters.search = '';
+          state.filters.sources = data.sources.map(s => s.id);
+          state.filters.tag = 'all';
+          state.filters.dateRange = 'all';
+          state.filters.customStart = '';
+          state.filters.customEnd = '';
+          state.pagination.page = 1;
+          searchInput.value = '';
+          searchClear.classList.add('hidden');
+          document.getElementById('custom-start').value = '';
+          document.getElementById('custom-end').value = '';
+          renderSourceDropdown();
+          renderTagDropdown();
+          updateDateDropdownUI();
+          renderAll();
+        });
+
+        document.getElementById('empty-clear-btn').addEventListener('click', () => {
+          document.getElementById('clear-all-filters').click();
+        });
+
+        // Refresh
+        document.getElementById('refresh-btn').addEventListener('click', () => {
+          refreshFromRSS();
+        });
+
+        // Load more
+        document.getElementById('load-more-btn').addEventListener('click', () => {
+          state.pagination.page += 1;
+          renderPolicyList();
+        });
+      }
+
+      function updateDateDropdownUI() {
+        document.querySelectorAll('.date-option').forEach(btn => {
+          const active = btn.dataset.value === state.filters.dateRange;
+          btn.className = 'date-option w-full text-left px-3 py-2 rounded text-sm ' + (active ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100');
+        });
+      }
+
+      function updateSortDropdownUI() {
+        document.querySelectorAll('.sort-option').forEach(btn => {
+          const active = btn.dataset.value === state.sort;
+          btn.className = 'sort-option w-full text-left px-3 py-2 rounded text-sm ' + (active ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100');
+        });
+      }
+
+      renderSourceDropdown();
+      renderTagDropdown();
+      bindEvents();
+      renderAll();
+    })();
+  </script>
+</body>
+</html>

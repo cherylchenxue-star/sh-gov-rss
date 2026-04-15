@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Debug / test files generated during development
+debug_*
+test_*
+*.log
+rss_preview.txt
+
+# Data artifacts from other projects in this directory
+*.json
+*.html
+!ff_calendar_viewer.html
+!index.html
+!sh_index.html
+*.js
+!sz_policy_rss/**/*.py
+*.txt
+!requirements.txt
+*.png
+*.exe
+*.lnk
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Playwright
+playwright-report/
+test-results/
