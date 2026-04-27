@@ -9,7 +9,9 @@
 
 import sys
 import argparse
-from typing import List
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
 
 from sh_policy_rss.models import FetchResult, PolicyItem
 from sh_policy_rss.build_rss import build_rss
@@ -28,7 +30,7 @@ SOURCES = [
 ]
 
 DEFAULT_OUTPUT = "上海政策rss.xml"
-DEFAULT_HTML_OUTPUT = "sh_index.html"
+DEFAULT_HTML_OUTPUT = "index.html"
 
 
 def run_fetchers(max_items: int = 20, verbose: bool = False) -> List[FetchResult]:
@@ -55,6 +57,98 @@ def run_fetchers(max_items: int = 20, verbose: bool = False) -> List[FetchResult
                 print(f"  ✗ 失败: {result.error_message}")
 
     return results
+
+
+def load_existing_items(rss_path: str) -> List[PolicyItem]:
+    """从现有 RSS 文件中加载旧条目，用于数据合并"""
+    items: List[PolicyItem] = []
+    try:
+        tree = ET.parse(rss_path)
+        root = tree.getroot()
+    except Exception:
+        return items
+
+    for item_elem in root.findall(".//item"):
+        title = item_elem.findtext("title", "")
+        link = item_elem.findtext("link", "")
+        source = item_elem.findtext("source", "")
+        pub_date_str = item_elem.findtext("pubDate", "")
+        description = item_elem.findtext("description", "")
+
+        if not title or not link:
+            continue
+
+        # 解析 pubDate: "Mon, 27 Apr 2026 05:25:10 +0000"
+        pub_date = datetime.now()
+        try:
+            # 去掉时区部分，手动解析
+            pd_clean = pub_date_str.strip()
+            if pd_clean.endswith(" +0000"):
+                pd_clean = pd_clean[:-6]
+            pub_date = datetime.strptime(pd_clean, "%a, %d %b %Y %H:%M:%S")
+        except Exception:
+            pass
+
+        # 从 description 中提取摘要（去掉 "来源: xxx<br/>" 前缀）
+        summary = description
+        if summary.startswith("来源: "):
+            idx = summary.find("<br/>")
+            if idx != -1:
+                summary = summary[idx + 5:]
+
+        # 提取标签
+        tags = []
+        for cat in item_elem.findall("category"):
+            text = cat.text or ""
+            if text:
+                tags.append(text)
+
+        # 推断 source_id
+        source_id_map = {
+            "上海市经信委": "sh-sheitc-zcfg",
+            "上海市经信委专项资金": "sh-sheitc-zxzj",
+            "上海市发改委": "sh-fgw",
+            "上海市科委": "sh-stcsm",
+        }
+        source_id = source_id_map.get(source, "sh-unknown")
+
+        items.append(
+            PolicyItem(
+                title=title,
+                link=link,
+                pub_date=pub_date,
+                source=source,
+                source_id=source_id,
+                city="shanghai",
+                summary=summary,
+                tags=tags,
+            )
+        )
+
+    return items
+
+
+def merge_items(new_items: List[PolicyItem], old_items: List[PolicyItem], days: int = 30, max_total: int = 200) -> List[PolicyItem]:
+    """合并新旧数据：新数据优先，保留旧数据中未过期的条目"""
+    cutoff = datetime.now() - timedelta(days=days)
+
+    # 新数据建立索引（按 link）
+    new_links = {item.link for item in new_items}
+
+    # 保留旧数据中：不在新数据里、且未过期的条目
+    preserved = [item for item in old_items if item.link not in new_links and item.pub_date >= cutoff]
+
+    # 合并
+    merged = list(new_items) + preserved
+
+    # 按时间降序排序
+    merged.sort(key=lambda x: x.pub_date, reverse=True)
+
+    # 限制总数
+    if len(merged) > max_total:
+        merged = merged[:max_total]
+
+    return merged
 
 
 def main():
@@ -88,11 +182,18 @@ def main():
 
     print(f"\n总计: {success_count}/{len(results)} 个源成功，共 {total_items} 条政策")
 
-    # 聚合所有条目
-    all_items: List[PolicyItem] = []
+    # 聚合所有新条目
+    new_items: List[PolicyItem] = []
     for r in results:
         if r.success:
-            all_items.extend(r.items)
+            new_items.extend(r.items)
+
+    # 加载旧数据并合并
+    print(f"\n[合并] 加载现有 RSS: {args.output}")
+    old_items = load_existing_items(args.output)
+    print(f"       现有 {len(old_items)} 条，新抓取 {len(new_items)} 条")
+    all_items = merge_items(new_items, old_items, days=30, max_total=200)
+    print(f"       合并后共 {len(all_items)} 条")
 
     # 生成RSS
     rss_content = build_rss(all_items, title="上海政策RSS聚合")

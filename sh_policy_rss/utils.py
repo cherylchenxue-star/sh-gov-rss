@@ -13,14 +13,23 @@ from typing import Optional, Dict, Any, List
 
 def curl_fetch(url: str, timeout: int = 20, follow_redirects: bool = True) -> str:
     """使用curl获取URL内容（绕过Python SSL问题）"""
-    cmd = ["curl", "-s", "-k", "--max-time", str(timeout)]
+    cmd = [
+        "curl", "-s", "-k", "--max-time", str(timeout), "--connect-timeout", "10",
+        "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    ]
     if follow_redirects:
         cmd.append("-L")
     cmd.append(url)
 
     result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
+    # HTTPS 失败时降级到 HTTP
+    if result.returncode != 0 and url.startswith("https://"):
+        http_url = url.replace("https://", "http://", 1)
+        cmd[-1] = http_url
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
     if result.returncode != 0:
-        raise RuntimeError(f"curl failed: {result.stderr}")
+        err = (result.stderr or result.stdout or "unknown error")[:300]
+        raise RuntimeError(f"curl failed ({result.returncode}): {err}")
     return result.stdout
 
 
@@ -31,11 +40,35 @@ def curl_fetch_json(url: str, timeout: int = 20) -> Dict[str, Any]:
 
 
 def parse_chinese_date(date_str: str) -> Optional[datetime]:
-    """解析多种中文日期格式"""
+    """解析多种中文日期格式，支持带时间"""
     if not date_str:
         return None
 
     date_str = date_str.strip()
+
+    # 优先匹配带时间的格式: 2026-04-24 02:04:17 或 2026-04-24T02:04:17
+    # 支持全角冒号 ":" (U+FF1A) 和半角冒号 ":"
+    time_match = re.search(r"(\d{4})-(\d{2})-(\d{2})[T\s](\d{2})[:：∶](\d{2})[:：∶](\d{2})", date_str)
+    if time_match:
+        try:
+            return datetime(
+                int(time_match.group(1)), int(time_match.group(2)), int(time_match.group(3)),
+                int(time_match.group(4)), int(time_match.group(5)), int(time_match.group(6)),
+            )
+        except ValueError:
+            pass
+
+    # 匹配 HH:MM 不带秒的情况（支持全角冒号）
+    time_match2 = re.search(r"(\d{4})-(\d{2})-(\d{2})[T\s](\d{2})[:：∶](\d{2})", date_str)
+    if time_match2:
+        try:
+            return datetime(
+                int(time_match2.group(1)), int(time_match2.group(2)), int(time_match2.group(3)),
+                int(time_match2.group(4)), int(time_match2.group(5)),
+            )
+        except ValueError:
+            pass
+
     patterns = [
         (r"(\d{4})-(\d{2})-(\d{2})", lambda m: datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))),
         (r"(\d{4})/(\d{2})/(\d{2})", lambda m: datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))),
